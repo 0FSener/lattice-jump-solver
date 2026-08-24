@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Symmetry Jump: Territory Control</title>
+<style>
+:root{color-scheme:dark;--bg:#07101e;--panel:#111e33;--line:#29476c;--text:#eaf5ff;--muted:#a7bfd7;--blue:#86d3ff;--white:#fff;--gold:#ffd46b}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#18345a,var(--bg) 60%);color:var(--text);font:15px system-ui,sans-serif}
+/* Widen the app to accommodate 3 columns smoothly */
+.app{max-width:1500px;margin:auto;padding:24px 16px}
+/* 3 Column Grid Layout */
+.layout{display:grid;grid-template-columns:330px minmax(0,1fr) 300px;gap:20px;margin-top:10px}
+.panel{background:#0c182a;border:1px solid var(--line);border-radius:14px;padding:16px}
+canvas{display:block;width:100%;height:65vh;min-height:450px;background:#71839d;border-radius:10px;cursor:crosshair}
+.legend{display:flex;gap:15px;flex-wrap:wrap;color:var(--muted);font-size:.85rem;padding-top:10px}.swatch{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:-1px}
+
+/* Right Sidebar Header & Status */
+.sidebar-header{margin-bottom:15px}
+.sidebar-header h1{margin:0 0 5px;font-size:1.6rem}
+.sidebar-header p{margin:0;color:var(--muted);font-size:.9rem}
+#status{padding:10px;border:1px solid var(--line);border-radius:10px;color:var(--blue);text-align:center;font-weight:600;margin-bottom:15px;background:#13223a}
+
+/* Media Controls Styling */
+.media-controls {display:flex;justify-content:center;align-items:center;gap:16px;margin-bottom:16px;padding:10px;background:#13223a;border-radius:20px;border:1px solid var(--line)}
+.media-controls button {border:none;background:#1a3152;color:var(--text);border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;box-shadow:0 4px 6px rgba(0,0,0,0.3)}
+.media-controls button:hover {background:#27466f;transform:scale(1.05)}
+.media-controls button.play-btn {width:58px;height:58px;background:var(--blue);color:#05101d}
+.media-controls button.play-btn:hover {background:#a2dfff;transform:scale(1.08)}
+.media-controls svg {width:20px;height:20px;fill:currentColor}
+.play-btn svg {width:26px;height:26px}
+
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button.standard-btn{border:1px solid #365981;border-radius:9px;background:#1a3152;color:var(--text);padding:10px 8px;font:inherit;cursor:pointer;transition:background 0.2s}
+button.standard-btn:hover{background:#27466f}
+.wide{grid-column:span 2}
+
+.details{margin-bottom:15px;color:var(--muted);font-size:.95rem;display:grid;gap:6px}.details b{color:var(--text)}
+.zoom-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px;border-top:1px solid var(--line);padding-top:16px}
+
+h2{font-size:1.1rem;margin:0 0 10px;border-bottom:1px solid var(--line);padding-bottom:5px}
+.log{list-style:none;padding:0;margin:0;max-height:350px;overflow:auto;border-bottom:1px solid var(--line);margin-bottom:10px}
+.log li{padding:6px 3px;border-bottom:1px solid #1d314d;color:var(--muted);font-size:.82rem}.log li.now{color:var(--text);background:#173155}
+.overlay{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:#030914c9;z-index:5}.overlay[hidden]{display:none}.modal{width:min(510px,100%);background:#13223a;border:1px solid #466890;border-radius:16px;padding:22px;box-shadow:0 25px 80px #000}.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.fields label{display:grid;gap:5px;color:var(--muted);font-size:.9rem}.full{grid-column:span 2}input,textarea{background:#081526;color:var(--text);border:1px solid #3d628d;border-radius:8px;padding:9px;font:inherit;width:100%}textarea{min-height:76px;resize:vertical}.help,.error{font-size:.82rem}.help{color:var(--muted)}.error{color:#ffabb7;min-height:1.3em}
+
+/* Unified Stats Table Styling */
+.stats-table{width:100%;border-collapse:collapse;text-align:center;font-size:.82rem;color:var(--text); margin-bottom: 20px;}
+.stats-table th,.stats-table td{padding:6px 2px;border-bottom:1px solid var(--line)}
+.stats-table th{color:var(--muted);font-weight:normal; font-size: 0.78rem;}
+.stats-table td:first-child{text-align:left; font-weight:bold;}
+.stone-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+
+/* Bottom Bar layout */
+.bottom-bar {display:flex; align-items:flex-start; margin-top:10px; gap: 20px;}
+.legends-container { display:grid; flex:1; min-width:0; }
+.coords-list {display:flex; gap:8px; flex-wrap:wrap; font-size:.82rem; flex:1; justify-content:flex-start; align-content:flex-start;}
+.coord-badge {background:#13223a; padding:6px 10px; border-radius:6px; border:1px solid var(--line); color:var(--text); display:flex; align-items:center;}
+
+@media(max-width:1100px){
+    .layout{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<main class="app">
+    <div class="layout">
+        <!-- LEFT PANEL: Statistics and History -->
+        <aside class="panel side left-panel">
+            <div class="leaderboard">
+                <h2>Game Statistics</h2>
+                <table class="stats-table">
+                    <thead>
+                        <tr>
+                            <th title="Stone Color">Stn</th>
+                            <th title="First Visits">1st V.</th>
+                            <th title="Currently Owned">Owned</th>
+                            <th title="Times jumped (1st select)">Jump</th>
+                            <th title="Times jumped over (Pivot)">Pivot</th>
+                            <th title="Real Score = Total / Jumps">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scoreTableBody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="history">
+                <h2>Move history</h2>
+                <ol class="log" id="log"></ol>
+            </div>
+        </aside>
+
+        <!-- CENTER PANEL: Canvas and Legend -->
+        <section class="panel center-panel">
+            <canvas id="board" aria-label="Cartesian plane"></canvas>
+            
+            <div class="bottom-bar">
+                <div class="legends-container">
+                    <!-- Default Legend -->
+                    <div class="legend" id="defaultLegend" style="grid-area: 1 / 1; visibility:visible;">
+                        <span><i class="swatch" style="background:linear-gradient(90deg, #ff8e5e, #86d3ff)"></i>Stones</span>
+                        <span><i class="swatch" style="background:#fff"></i>Selected Target</span>
+                    </div>
+                    <!-- Heatmap Legend (Hidden by default) -->
+                    <div class="legend" id="heatmapLegend" style="grid-area: 1 / 1; visibility:hidden;">
+                        <span style="color:var(--text)"><b>Heatmap Scale:</b></span>
+                        <span><i class="swatch" style="background:#b3e0ff"></i>1</span>
+                        <span><i class="swatch" style="background:#8cd1ff"></i>2</span>
+                        <span><i class="swatch" style="background:#66c2ff"></i>3</span>
+                        <span><i class="swatch" style="background:#40b3ff"></i>4</span>
+                        <span><i class="swatch" style="background:#1a94ff"></i>5</span>
+                        <span><i class="swatch" style="background:#0088cc"></i>6</span>
+                        <span><i class="swatch" style="background:#ffea75"></i>7</span>
+                        <span><i class="swatch" style="background:#ffdd57"></i>8</span>
+                        <span><i class="swatch" style="background:#ffd03a"></i>9</span>
+                        <span><i class="swatch" style="background:#ffc31c"></i>10</span>
+                        <span><i class="swatch" style="background:#ffb600"></i>11</span>
+                        <div style="flex-basis:100%;height:0;margin:0;"></div>
+                        <span><i class="swatch" style="background:#ffa600"></i>12</span>
+                        <span><i class="swatch" style="background:#ff9500"></i>13</span>
+                        <span><i class="swatch" style="background:#ff8400"></i>14</span>
+                        <span><i class="swatch" style="background:#ff7300"></i>15</span>
+                        <span><i class="swatch" style="background:#ff6200"></i>16</span>
+                        <span><i class="swatch" style="background:#f54200"></i>17</span>
+                        <span><i class="swatch" style="background:#e63946"></i>18</span>
+                        <span><i class="swatch" style="background:#d62839"></i>19</span>
+                        <span><i class="swatch" style="background:#b5172b"></i>20</span>
+                        <span><i class="swatch" style="background:#8f0b21"></i>21</span>
+                        <span><i class="swatch" style="background:#5c0011"></i>22+</span>
+                    </div>
+                </div>
+                
+                <!-- Starting Coordinates display -->
+                <div class="coords-list" id="startingCoords"></div>
+            </div>
+        </section>
+
+        <!-- RIGHT PANEL: Header, Status, Controls, Zoom -->
+        <aside class="panel side right-panel">
+            <div class="sidebar-header">
+                <h1>Symmetry Jump</h1>
+                <p>Stone A jumps over B: A′ = 2B − A</p>
+            </div>
+            
+            <div id="status" aria-live="polite">Enter settings</div>
+            
+            <div class="details">
+                <div><b>Step:</b> <span id="stepNo">0</span></div>
+                <div><b>Zoom:</b> <span id="zoomText">100%</span></div>
+            </div>
+            
+            <div class="media-controls" style="flex-direction: column; align-items: stretch; gap: 15px;">
+                <div style="display: flex; justify-content: center; align-items: center; gap: 15px;">
+                    <button id="stepBack" title="Step Back">
+                        <svg viewBox="0 0 24 24"><path d="M19,5V19L8,12M7,5V19H5V5"/></svg>
+                    </button>
+                    <button id="playPause" class="play-btn" title="Play / Pause">
+                        <svg id="iconPlay" viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
+                        <svg id="iconPause" style="display:none;" viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z"/></svg>
+                    </button>
+                    <button id="stepFwd" title="Step Forward">
+                        <svg viewBox="0 0 24 24"><path d="M5,5V19L16,12M17,5V19H19V5"/></svg>
+                    </button>
+                </div>
+                <label style="color:var(--text); font-size:0.85rem; display:flex; align-items:center; gap:10px; padding: 0 10px;">
+                    Speed: <input type="range" id="speedSlider" min="1" max="5000" value="1" style="flex:1; cursor:pointer;">
+                </label>
+            </div>
+
+            <div class="controls">
+                <button class="standard-btn wide" id="toggleHeatmap" style="border-color:#ff8e5e">Toggle Heatmap: OFF</button>
+                <button class="standard-btn" id="reset">Reset</button>
+                <button class="standard-btn" id="saveBtn">Save</button>
+                <button class="standard-btn" id="savesListBtn">Saves</button>
+                <button class="standard-btn" id="settings">New Settings</button>
+            </div>
+            
+            <div class="zoom-controls">
+                <button class="standard-btn" id="zoomOut">Zoom −</button>
+                <button class="standard-btn" id="zoomIn">Zoom +</button>
+                <button class="standard-btn wide" id="zoomReset">Reset Zoom</button>
+            </div>
+        </aside>
+    </div>
+</main>
+
+<div class="overlay" id="introOverlay">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="introTitle">
+        <div id="introPage1">
+            <h2 id="introTitle">Symmetry Jump: Mathematical Foundation</h2>
+            <p>This simulation models a system where points move through space using point reflection (symmetry).</p>
+            <ul style="color:var(--muted); font-size:.9rem; line-height: 1.5; padding-left: 20px;">
+                <li><b style="color:var(--text)">The Jump:</b> When Stone A jumps over Stone B, it reflects across B as its center. <b>Formula: A′ = 2B − A</b></li>
+                <li><b style="color:var(--text)">The Parity Invariant (Odd/Even Rule):</b> The parity of a stone's coordinates can never change! Since `2B` is always an even number, `2B - A` preserves the odd/even status of `A`. An (Even, Even) stone is permanently trapped on even coordinates and can never capture an (Odd, Odd) space.</li>
+                <li><b style="color:var(--text)">First Visit:</b> The first stone to land on an unvisited coordinate earns <b>10 Points</b>.</li>
+                <li><b style="color:var(--text)">Area Control (Owned):</b> The last stone to land on a coordinate claims it. The score awarded is <b>10 / (total visits)</b>, rewarding the exploration of new territory.</li>
+                <li><b style="color:var(--text)">Real Score:</b> The total raw score divided by the number of jumps the stone has made.</li>
+            </ul>
+            <button class="standard-btn" style="width:100%; margin-top: 15px; background: var(--blue); color: #05101d; font-weight: bold;" id="nextIntroBtn">Next: How to Use</button>
+        </div>
+        <div id="introPage2" style="display:none;">
+            <h2>How to Use the System</h2>
+            <ul style="color:var(--muted); font-size:.9rem; line-height: 1.5; padding-left: 20px;">
+                <li><b style="color:var(--text)">Setup:</b> Click <b>New Settings</b> to define the grid size and stone count. You can enter coordinates manually or use <b>Place on Grid</b> to position them with your mouse.</li>
+                <li><b style="color:var(--text)">Manual Play:</b> Select a stone by clicking on it, then click on the target stone you want to jump over. The selected stone will perform the symmetry jump.</li>
+                <li><b style="color:var(--text)">Auto Simulation:</b> Click the <b>Play</b> button to let the computer run automatically. It will use a mixture of Uniform, Cryptographic, and Gaussian random algorithms to pick jumpers and pivots.</li>
+                <li><b style="color:var(--text)">Heatmap:</b> Click <b>Toggle Heatmap</b> to visualize the density of jumps and see which areas are most heavily contested.</li>
+            </ul>
+            <button class="standard-btn" style="width:100%; margin-top: 15px; background: var(--blue); color: #05101d; font-weight: bold;" id="startAppBtn">Got it, Start!</button>
+        </div>
+    </section>
+</div>
+
+<div class="overlay" id="savesOverlay" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="savesTitle">
+        <h2 id="savesTitle">Saved Simulations</h2>
+        <div id="savesContainer" style="max-height: 350px; overflow-y: auto; margin-bottom:15px; padding-right:5px;"></div>
+        <button class="standard-btn" style="width:100%" onclick="document.getElementById('savesOverlay').hidden=true">Close</button>
+    </section>
+</div>
+
+<div class="overlay" id="setup" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+        <h2 id="setupTitle">New game settings</h2>
+        <p>Origin is at the center. For 100 × 100, coordinates range from −50…+50.</p>
+        <form id="setupForm">
+            <div class="fields">
+                <label>X size<input id="gx" type="number" min="4" max="300" value="100" required></label>
+                <label>Y size<input id="gy" type="number" min="4" max="300" value="100" required></label>
+                <label class="full">Stone count<input id="count" type="number" min="2" max="50" value="3" required></label>
+                <label class="full">Coordinates (optional)<textarea id="coordinates" placeholder="e.g.: 0,0; 2,2; -2,0">0,0; 1,0; 0,1</textarea></label>
+            </div>
+            <p class="help">Leave coordinates empty to place them randomly, enter them manually, or use the "Place on Grid" button.</p>
+            <p class="error" id="error"></p>
+            <div class="controls">
+                <button class="standard-btn primary" type="submit" id="startBtn">Start Game (Auto)</button>
+                <button class="standard-btn" type="button" id="placeBtn" style="border-color: var(--blue);">Place on Grid</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d');
+const ui={
+    status:$('status'), step:$('stepNo'), log:$('log'), 
+    scores:$('scoreTableBody'), coords:$('startingCoords')
+};
+let grid={x:100,y:100},initial=[],states=[],moves=[],cursor=0,visited=new Map(),selected=null,hover=null,autoId=null,zoom=1,showHeatmap=false;
+let setupMode = false, stonesToPlace = 0;
+
+const RNG = {
+    A: () => Math.random(),
+    B: () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296,
+    C: () => {
+        let u=0, v=0;
+        while(u===0) u=Math.random();
+        while(v===0) v=Math.random();
+        let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        num = num / 6.0 + 0.5; 
+        if(num < 0 || num >= 1) return RNG.C();
+        return num;
+    }
+};
+
+function pixelToPoint(px, py){
+    const a = pad();
+    const w = canvas.clientWidth - 2 * a;
+    const h = canvas.clientHeight - 2 * a;
+    const scale = Math.min(w / grid.x, h / grid.y);
+    const x = Math.round((px - canvas.clientWidth / 2) / (scale * zoom));
+    const y = Math.round((canvas.clientHeight / 2 - py) / (scale * zoom));
+    return {x, y};
+}
+
+const minX=()=>-Math.floor(grid.x/2),maxX=()=>Math.ceil(grid.x/2),minY=()=>-Math.floor(grid.y/2),maxY=()=>Math.ceil(grid.y/2);
+const copy=s=>s.map(p=>({...p})),key=p=>`${p.x},${p.y}`,inside=p=>p.x>=minX()&&p.x<=maxX()&&p.y>=minY()&&p.y<=maxY();
+const getStoneColor=i=>`hsl(${(i*137.5)%360}, 75%, 65%)`;
+
+function updatePlayBtnUI() {
+    if (autoId !== null) {
+        $('iconPlay').style.display = 'none';
+        $('iconPause').style.display = 'block';
+    } else {
+        $('iconPlay').style.display = 'block';
+        $('iconPause').style.display = 'none';
+    }
+}
+
+function stopAuto(){
+    if(autoId!==null){
+        clearInterval(autoId);
+        autoId=null;
+        updatePlayBtnUI();
+    }
+}
+
+function rebuildVisited(){
+    visited = new Map();
+    initial.forEach((p, i) => visited.set(key(p), {count: 1, first: i, last: i}));
+    for(let i=0; i<cursor; i++) {
+        const move = moves[i];
+        if(move) {
+            const k = key(move.to);
+            const current = visited.get(k);
+            if(current) {
+                visited.set(k, { count: current.count + 1, first: current.first, last: move.a });
+            } else {
+                visited.set(k, { count: 1, first: move.a, last: move.a });
+            }
+        }
+    }
+}
+
+function resetGame(msg='Game reset to initial state'){stopAuto();states=[copy(initial)];moves=[];cursor=0;selected=null;hover=null;rebuildVisited();render(msg)}
+function pad(){return 36}
+
+function pointToPixel(p){
+    const a = pad();
+    const w = canvas.clientWidth - 2 * a;
+    const h = canvas.clientHeight - 2 * a;
+    // Calculate a single common scale for both axes to keep grid perfectly square
+    const scale = Math.min(w / grid.x, h / grid.y);
+    
+    return {
+        x: canvas.clientWidth / 2 + p.x * scale * zoom,
+        y: canvas.clientHeight / 2 - p.y * scale * zoom
+    };
+}
+
+function resize(){const r=canvas.getBoundingClientRect(),d=devicePixelRatio||1;canvas.width=Math.max(1,Math.round(r.width*d));canvas.height=Math.max(1,Math.round(r.height*d));ctx.setTransform(d,0,0,d,0,0);draw()}
+
+function draw(){
+    const W=canvas.clientWidth,H=canvas.clientHeight,a=pad();
+    ctx.clearRect(0,0,W+2,H+2);ctx.fillStyle='#183b67';ctx.fillRect(0,0,W+2,H+2);ctx.fillStyle='#000';
+    
+    // Grid scale
+    const scale = Math.min((W - 2 * a) / grid.x, (H - 2 * a) / grid.y);
+    const dotSize = Math.max(1, Math.min(2.2, scale * 0.3 * zoom)); // Small base grid dots
+    
+    for(let x=minX();x<=maxX();x++)for(let y=minY();y<=maxY();y++){
+        const p=pointToPixel({x,y});ctx.fillRect(p.x-dotSize/2,p.y-dotSize/2,dotSize,dotSize)
+    }
+    const tick=Math.max(grid.x,grid.y)<=30?1:5;
+    ctx.strokeStyle='#264d7a';ctx.lineWidth=1;
+    
+    for(let x=minX();x<=maxX();x+=tick){
+        const p=pointToPixel({x, y:0});
+        ctx.beginPath();ctx.moveTo(p.x, a);ctx.lineTo(p.x, H-a);ctx.stroke();
+    }
+    for(let y=minY();y<=maxY();y+=tick){
+        const p=pointToPixel({x:0, y});
+        ctx.beginPath();ctx.moveTo(a, p.y);ctx.lineTo(W-a, p.y);ctx.stroke();
+    }
+    
+    // Draw Unvisited Black Dots
+    const tL = pixelToPoint(0, 0), bR = pixelToPoint(W, H);
+    const sX = Math.max(minX(), tL.x - 2), eX = Math.min(maxX(), bR.x + 2);
+    const sY = Math.max(minY(), bR.y - 2), eY = Math.min(maxY(), tL.y + 2);
+    
+    const pScale = scale * zoom;
+    const dotR = Math.max(0.5, Math.min(4, pScale / 4));
+
+    if (pScale >= 3) {
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        for(let x=sX; x<=eX; x++){
+            for(let y=sY; y<=eY; y++){
+                if(!visited.has(`${x},${y}`)){
+                    const p = pointToPixel({x,y});
+                    ctx.moveTo(p.x+dotR, p.y);
+                    ctx.arc(p.x, p.y, dotR, 0, Math.PI*2);
+                }
+            }
+        }
+        ctx.fill();
+    }
+
+    const o=pointToPixel({x:0,y:0}),lo=pointToPixel({x:minX(),y:minY()}),hi=pointToPixel({x:maxX(),y:maxY()});
+    ctx.strokeStyle='#79b4ed';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(o.x,a);ctx.lineTo(o.x,H-a);ctx.moveTo(a,o.y);ctx.lineTo(W-a,o.y);ctx.stroke();
+    ctx.strokeStyle='#315b8a';ctx.strokeRect(lo.x,hi.y,hi.x-lo.x,lo.y-hi.y);
+    ctx.fillStyle='#dcecff';ctx.font='12px system-ui';ctx.fillText('0',o.x+5,o.y-6);ctx.fillText('x',W-a+8,o.y-4);ctx.fillText('y',o.x+5,a-9);
+    
+    // Draw Visited Points
+    for(const [item, data] of visited.entries()){
+        const [x,y]=item.split(',').map(Number),p=pointToPixel({x,y});
+        ctx.beginPath();ctx.arc(p.x,p.y, dotR, 0, Math.PI*2);
+        
+        if (showHeatmap) {
+            const heatmapColors = [
+                '#b3e0ff','#8cd1ff','#66c2ff','#40b3ff','#1a94ff','#0088cc',
+                '#ffea75','#ffdd57','#ffd03a','#ffc31c','#ffb600','#ffa600',
+                '#ff9500','#ff8400','#ff7300','#ff6200','#f54200','#e63946',
+                '#d62839','#b5172b','#8f0b21','#5c0011'
+            ];
+            ctx.fillStyle = heatmapColors[Math.min(data.count, 22) - 1];
+        } else {
+            ctx.fillStyle = getStoneColor(data.last);
+        }
+        ctx.fill();
+    }
+    
+    const active=states[cursor]||[];
+    // Selected Target Preview
+    if(selected!==null&&hover!==null&&hover!==selected){
+        const target={x:2*active[hover].x-active[selected].x,y:2*active[hover].y-active[selected].y};
+        if(inside(target)){
+            const p=pointToPixel(target);
+            ctx.beginPath();ctx.arc(p.x,p.y, 11, 0, Math.PI*2); // Fixed 11px radius
+            ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([])
+        }
+    }
+    
+    // Active Stones
+    const at=new Map();
+    active.forEach((p,i)=>{
+        const k=key(p),n=at.get(k)||0;at.set(k,n+1);
+        const angle=n*2.4,offset=n?7:0,q=pointToPixel(p),x=q.x+Math.cos(angle)*offset,y=q.y+Math.sin(angle)*offset;
+        
+        const r = i===selected ? 11 : 7.5; // Fixed smaller stone sizes
+        ctx.beginPath();ctx.arc(x,y, r, 0, Math.PI*2);
+        ctx.fillStyle=i===selected?'#fff':getStoneColor(i);
+        ctx.fill();ctx.strokeStyle='#183b67';ctx.lineWidth=2;ctx.stroke()
+    });
+}
+
+function render(msg){
+    if(msg)ui.status.textContent=msg;
+    const now=states[cursor]||[];
+    ui.step.textContent=cursor;
+    $('zoomText').textContent=`${Math.round(zoom*100)}%`;
+    
+    ui.log.innerHTML=moves.length?moves.map((m,i)=>`<li class="${i+1===cursor?'now':''}">
+        <span class="stone-dot" style="background:${getStoneColor(m.a)}"></span> 
+        (${m.from.x}, ${m.from.y}) → (${m.to.x}, ${m.to.y})</li>`).join(''):'<li>No moves yet.</li>';
+
+    ui.coords.innerHTML = initial.map((p, i) => 
+        `<div class="coord-badge"><span class="stone-dot" style="background:${getStoneColor(i)}"></span>S${i+1}: (${p.x}, ${p.y})</div>`
+    ).join('');
+
+    const stats = Array(now.length).fill(null).map(()=>({ first: 0, owned: 0, score: 0, jumper: 0, pivot: 0 }));
+    const FIRST_VISIT_WEIGHT = 10;
+    const OWN_WEIGHT = 10;
+    
+    for (const [k, v] of visited.entries()) {
+        if (stats[v.first] !== undefined) stats[v.first].first += 1;
+        if (stats[v.last] !== undefined) {
+            stats[v.last].owned += 1;
+            stats[v.last].score += (OWN_WEIGHT / v.count);
+        }
+    }
+    
+    for (let i = 0; i < cursor; i++) {
+        const m = moves[i];
+        if (m) {
+            if (stats[m.a] !== undefined) stats[m.a].jumper++;
+            if (stats[m.b] !== undefined) stats[m.b].pivot++;
+        }
+    }
+    
+    let tbody = '';
+    for (let i = 0; i < stats.length; i++) {
+        let totalRawScore = stats[i].score + (stats[i].first * FIRST_VISIT_WEIGHT);
+        let realScore = stats[i].jumper > 0 ? totalRawScore / stats[i].jumper : totalRawScore;
+        
+        tbody += `<tr>
+            <td><span class="stone-dot" style="background:${getStoneColor(i)}"></span> S${i+1}</td>
+            <td>${stats[i].first}</td>
+            <td>${stats[i].owned}</td>
+            <td>${stats[i].jumper}</td>
+            <td>${stats[i].pivot}</td>
+            <td><b>${realScore.toFixed(2)}</b></td>
+        </tr>`;
+    }
+    ui.scores.innerHTML = tbody;
+
+    draw();
+    if(ui.log.lastElementChild) ui.log.scrollTop = ui.log.scrollHeight;
+}
+
+function validMoves(state=states[cursor]){
+    const list=[];
+    for(let a=0;a<state.length;a++)for(let b=0;b<state.length;b++){
+        if(a===b)continue;
+        const to={x:2*state[b].x-state[a].x,y:2*state[b].y-state[a].y};
+        if(inside(to)&&(to.x!==state[a].x||to.y!==state[a].y))list.push({a,b,to})
+    }
+    return list
+}
+
+function move(a,b, info='', skipRender=false){
+    const old=states[cursor],to={x:2*old[b].x-old[a].x,y:2*old[b].y-old[a].y};
+    if(!inside(to)||(to.x===old[a].x&&to.y===old[a].y))return false;
+    const next=copy(old);next[a]=to;
+    states=states.slice(0,cursor+1);
+    moves=moves.slice(0,cursor);
+    states.push(next);
+    moves.push({from:{...old[a]},to:{...to},a,b});
+    cursor++;
+    rebuildVisited();
+    selected=null;hover=null;
+    if(!skipRender) render(`Stone ${a+1} jumped over ${b+1} ${info}`);
+    return true
+}
+
+function computerStep(skipRender=false){
+    const state = states[cursor];
+    const n = state.length;
+    const fns = ['A', 'B', 'C'];
+    let chosen = null;
+    let fnA = '', fnB = '';
+
+    for(let i=0; i<1000; i++){
+        fnA = fns[Math.floor(Math.random() * 3)];
+        const jumper = Math.floor(RNG[fnA]() * n);
+
+        fnB = fns[Math.floor(Math.random() * 3)];
+        const pivot = Math.floor(RNG[fnB]() * n);
+
+        if(jumper === pivot) continue;
+        
+        const A = state[jumper], B = state[pivot];
+        const to = {x: 2*B.x - A.x, y: 2*B.y - A.y};
+        
+        if (inside(to) && (to.x !== A.x || to.y !== A.y)) {
+            chosen = {a: jumper, b: pivot, to};
+            break;
+        }
+    }
+    
+    if(!chosen) {
+        const moves = validMoves();
+        if(!moves.length) return false;
+        chosen = moves[Math.floor(Math.random() * moves.length)];
+        fnA = 'FB'; fnB = 'FB';
+    }
+    
+    return move(chosen.a, chosen.b, `[RNG -> Jumper: ${fnA}, Pivot: ${fnB}]`, skipRender);
+}
+
+function startComputer(){
+    if(autoId)return;
+    
+    function loop() {
+        const speed = Number($('speedSlider').value) || 1;
+        
+        for(let i=0; i<speed; i++) {
+            const isLast = (i === speed - 1);
+            if(!computerStep(!isLast)) {
+                stopAuto();
+                if(isLast) render('No valid moves left');
+                return;
+            }
+        }
+        autoId = requestAnimationFrame(loop);
+    }
+    
+    autoId = requestAnimationFrame(loop);
+    updatePlayBtnUI();
+    render('Computer playing...');
+}
+
+function stopAuto(){
+    if(autoId) cancelAnimationFrame(autoId);
+    autoId=null;
+    updatePlayBtnUI();
+}
+
+$('playPause').addEventListener('click', () => {
+    if (autoId !== null) {
+        stopAuto();
+        render('Simulation paused');
+    } else {
+        startComputer();
+    }
+});
+
+$('toggleHeatmap').addEventListener('click', (e) => {
+    showHeatmap = !showHeatmap;
+    e.target.textContent = `Toggle Heatmap: ${showHeatmap ? 'ON' : 'OFF'}`;
+    e.target.style.background = showHeatmap ? 'var(--blue)' : '';
+    e.target.style.color = showHeatmap ? '#05101d' : '';
+    
+    $('defaultLegend').style.visibility = showHeatmap ? 'hidden' : 'visible';
+    $('heatmapLegend').style.visibility = showHeatmap ? 'visible' : 'hidden';
+    
+    render();
+});
+
+function hitStone(e){
+    const r=canvas.getBoundingClientRect();let found=null,best=20;
+    states[cursor].forEach((p,i)=>{
+        const q=pointToPixel(p),d=Math.hypot(e.clientX-r.left-q.x,e.clientY-r.top-q.y);
+        if(d<best){best=d;found=i}
+    });
+    return found
+}
+
+canvas.addEventListener('pointermove',e=>{
+    if(autoId!==null)return;
+    const r=canvas.getBoundingClientRect();
+    if(setupMode) return;
+    if(selected===null)return;
+    const h=hitStone(e);if(h!==hover){hover=h;draw()}
+});
+canvas.addEventListener('pointerleave',()=>{hover=null;draw()});
+canvas.addEventListener('pointerdown',e=>{
+    if(autoId!==null)return;
+    const r=canvas.getBoundingClientRect();
+    if(setupMode) {
+        const p = pixelToPoint(e.clientX - r.left, e.clientY - r.top);
+        if(!inside(p)) return;
+        if(initial.some(ex => ex.x === p.x && ex.y === p.y)) return;
+        initial.push(p);
+        states[0] = copy(initial);
+        render(`Click to place Stone ${initial.length + 1} (Remaining: ${stonesToPlace - initial.length})`);
+        if (initial.length >= stonesToPlace) {
+            setupMode = false;
+            resetGame('Game ready — Press Play to start');
+        }
+        return;
+    }
+    const h=hitStone(e);
+    if(h===null){selected=null;render('Selection cleared');return}
+    if(selected===null){selected=h;render(`Stone ${h+1} selected`)}
+    else if(selected===h){selected=null;render('Selection cleared')}
+    else if(!move(selected,h)){render('Target out of bounds')}
+});
+
+$('stepFwd').addEventListener('click',()=>{
+    stopAuto();
+    if (cursor < states.length - 1) {
+        cursor++; rebuildVisited(); render('Stepped forward');
+    } else {
+        if (!computerStep()) render('No valid moves');
+    }
+});
+$('stepBack').addEventListener('click',()=>{
+    stopAuto();
+    if (cursor > 0) {
+        cursor--; rebuildVisited(); render('Stepped backward');
+    }
+});
+
+function changeZoom(delta){zoom=Math.max(.4,Math.min(10,+(zoom+delta).toFixed(2)));render()}
+$('zoomIn').addEventListener('click',()=>changeZoom(.2));
+$('zoomOut').addEventListener('click',()=>changeZoom(-.2));
+$('zoomReset').addEventListener('click',()=>{zoom=1;render('Zoom reset')});
+canvas.addEventListener('wheel',e=>{e.preventDefault();changeZoom(e.deltaY<0?.15:-.15)},{passive:false});
+
+$('reset').addEventListener('click',()=>resetGame());
+$('saveBtn').addEventListener('click', () => {
+    stopAuto();
+    const data = { grid, initial, moves };
+    const metadata = { id: Date.now(), date: new Date().toLocaleString(), movesCount: moves.length, stoneCount: initial.length, grid: `${grid.x}x${grid.y}`, data };
+    let saves = JSON.parse(localStorage.getItem('symmetrySaves') || '[]');
+    saves.unshift(metadata);
+    localStorage.setItem('symmetrySaves', JSON.stringify(saves));
+    render('Simulation saved locally.');
+});
+
+$('savesListBtn').addEventListener('click', () => {
+    stopAuto();
+    const saves = JSON.parse(localStorage.getItem('symmetrySaves') || '[]');
+    const container = $('savesContainer');
+    if (saves.length === 0) {
+        container.innerHTML = '<p style="color:var(--muted)">No saves found.</p>';
+    } else {
+        container.innerHTML = saves.map(s => `
+            <div style="border:1px solid var(--line); padding:10px; margin-bottom:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong>${s.date}</strong><br>
+                    <span style="font-size:0.85rem; color:var(--muted)">Stones: ${s.stoneCount} | Jumps: ${s.movesCount} | Grid: ${s.grid}</span>
+                </div>
+                <div style="display:flex; gap:5px;">
+                    <button class="standard-btn" data-action="load" data-id="${s.id}" style="padding:5px 10px; border-color:var(--blue); background:#1a3152;">Load</button>
+                    <button class="standard-btn" data-action="delete" data-id="${s.id}" style="padding:5px 10px; border-color:#ff6b6b; background:#311515;">Del</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    $('savesOverlay').hidden = false;
+});
+
+$('savesContainer').addEventListener('click', e => {
+    if(e.target.tagName === 'BUTTON') {
+        const action = e.target.dataset.action;
+        const id = Number(e.target.dataset.id);
+        let saves = JSON.parse(localStorage.getItem('symmetrySaves') || '[]');
+        
+        if (action === 'delete') {
+            saves = saves.filter(s => s.id !== id);
+            localStorage.setItem('symmetrySaves', JSON.stringify(saves));
+            $('savesListBtn').click(); // refresh list
+        } else if (action === 'load') {
+            const save = saves.find(s => s.id === id);
+            if(!save) return;
+            grid = save.data.grid; initial = save.data.initial; moves = save.data.moves || [];
+            states = [copy(initial)]; visited = new Map();
+            initial.forEach((p, i) => visited.set(`${p.x},${p.y}`, {count: 1, first: i, last: i}));
+            for(let i=0; i<moves.length; i++){
+                const m = moves[i]; const next = copy(states[i]); next[m.a] = m.to; states.push(next);
+                const k = `${m.to.x},${m.to.y}`;
+                if(!visited.has(k)) { visited.set(k, {count: 1, first: m.a, last: m.a}); } 
+                else { const v = visited.get(k); v.count++; v.last = m.a; }
+            }
+            cursor = states.length - 1;
+            $('savesOverlay').hidden = true;
+            requestAnimationFrame(resize);
+            render('Simulation loaded from saves.');
+        }
+    }
+});
+
+$('settings').addEventListener('click',()=>{stopAuto();setupMode=false;$('setup').hidden=false;$('error').textContent=''});
+
+$('placeBtn').addEventListener('click', () => {
+    const gx=Number($('gx').value),gy=Number($('gy').value),n=Number($('count').value),error=$('error');
+    if(!Number.isInteger(gx)||!Number.isInteger(gy)||!Number.isInteger(n)||gx<4||gy<4||n<2){error.textContent='Enter valid integers.';return}
+    grid={x:gx,y:gy}; stonesToPlace = n; initial = []; states = [[]]; moves = []; cursor = 0; visited = new Map();
+    $('setup').hidden=true; setupMode = true; requestAnimationFrame(resize);
+    ui.status.textContent = `Click on board to place Stone 1 (Remaining: ${n})`;
+    draw();
+});
+
+$('setupForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const gx=Number($('gx').value),gy=Number($('gy').value),n=Number($('count').value),raw=$('coordinates').value.trim(),error=$('error');
+    if(!Number.isInteger(gx)||!Number.isInteger(gy)||!Number.isInteger(n)||gx<4||gy<4||n<2){error.textContent='Enter valid integers for grid and stone count.';return}
+    grid={x:gx,y:gy};const points=[],used=new Set();
+    if(raw)for(const part of raw.split(';').map(x=>x.trim()).filter(Boolean)){
+        const nums=part.split(',').map(x=>Number(x.trim()));const p={x:nums[0],y:nums[1]};
+        if(nums.length!==2||!Number.isInteger(p.x)||!Number.isInteger(p.y)||!inside(p)||used.has(key(p))){error.textContent='Coordinates must be unique, integers, and within the grid.';return}
+        points.push(p);used.add(key(p))
+    }
+    if(points.length>n){error.textContent='Coordinate count exceeds stone count.';return}
+    if(!raw){
+        const gap=Math.max(2,Math.floor(gx/(n+4)));
+        for(let i=0;i<n;i++)points.push({x:Math.round((i-(n-1)/2)*gap),y:0})
+    }
+    while(points.length<n){
+        const p={x:Math.round((Math.random()-.5)*gx*.2),y:Math.round((Math.random()-.5)*gy*.2)};
+        if(!used.has(key(p))){points.push(p);used.add(key(p))}
+    }
+    initial=copy(points);$('setup').hidden=true;resetGame('Game ready — Press Play to start');requestAnimationFrame(resize)
+});
+
+new ResizeObserver(resize).observe(canvas);resize();
+$('setupForm').dispatchEvent(new Event('submit'));
+
+$('nextIntroBtn').addEventListener('click', () => {
+    $('introPage1').style.display = 'none';
+    $('introPage2').style.display = 'block';
+});
+$('startAppBtn').addEventListener('click', () => {
+    $('introOverlay').hidden = true;
+});
+})();
+</script>
+</body>
+</html>
