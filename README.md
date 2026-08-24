@@ -2,7 +2,7 @@
 
 > A machine learning environment and simulator for infinite grid parity jump puzzles (inspired by concepts like Conway's Soldiers and Peg Solitaire).
 
-![Simulation Demo](placeholder.gif) *(Placeholder for your UI GIF or Screenshot)*
+![Simulation Interface](demo.png)
 
 **Topics:** `combinatorial-game-theory`, `invariant-theory`, `parity-arguments`, `discrete-mathematics`, `machine-learning`, `reinforcement-learning`, `simulation`
 
